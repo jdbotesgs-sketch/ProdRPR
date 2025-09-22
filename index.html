@@ -372,7 +372,7 @@ document.addEventListener('DOMContentLoaded', function(){
       const container = document.createElement('div'); container.className='panel'; container.style.marginBottom='8px';
       const h = document.createElement('div'); h.style.display='flex'; h.style.justifyContent='space-between'; h.style.alignItems='center';
       const title = document.createElement('h4'); title.textContent=line; title.style.margin='0';
-      const controls = document.createElement('div'); controls.innerHTML = `<button class="btn ghost compact" data-line="${escapeHtml(line)}" data-action="export-line">Exportar Prod_${d}.txt</button><button class="btn ghost compact" data-line="${escapeHtml(line)}" data-action="delete-line">Borrar línea</button>`;
+      const controls = document.createElement('div'); controls.innerHTML = `<button class="btn ghost compact" data-line="${escapeHtml(line)}"  data-action="delete-line">Borrar línea</button>`;
       h.appendChild(title); h.appendChild(controls); container.appendChild(h);
 
       // Centros
