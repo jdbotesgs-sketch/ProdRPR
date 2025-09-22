@@ -1,8 +1,7 @@
 {
   "name": "ProdRPR",
   "short_name": "ProdRPR",
-  "start_url": "./",
-  "scope": "./"
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#ff7a00",
