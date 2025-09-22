@@ -1,8 +1,6 @@
 <!doctype html>
 <html lang="es">
 <head>
-	<link rel="manifest" href="manifest.json">
-	<meta name="theme-color" content="#ff7a00">
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ProdRPR - Webapp</title>
@@ -34,21 +32,13 @@
     @media(max-width:700px){.grid{grid-template-columns:1fr}.row{flex-direction:column}}
   </style>
 </head>
-<script>
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js")
-    .then(() => console.log("Service Worker registrado"))
-    .catch(err => console.error("Error registrando SW", err));
-}
-</script>
-
 <body>
   <div class="wrap">
     <div class="card">
       <header>
         <div>
           <h1>ProdRPR</h1>
-          <small>Registro diario RPR</small>
+          <small>Registro diario — colores: blanco · naranja · gris claro</small>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <label class="small" style="margin:0">Fecha</label>
@@ -178,6 +168,8 @@ if ("serviceWorker" in navigator) {
   </div>
 
 <script>
+// Envolvemos la inicialización en DOMContentLoaded para mayor robustez
+document.addEventListener('DOMContentLoaded', function(){
 (function(){
   // Storage key
   const KEY = 'prodrpr_data_v1';
@@ -194,7 +186,8 @@ if ("serviceWorker" in navigator) {
   const c_repos = document.getElementById('c_repos');
   const c_punctual = document.getElementById('c_punctual');
   const c_def_text = document.getElementById('c_defect_text');
-  const c_add_def = document.getElementById('c_add_def');
+  // FIXED: ID in HTML is "c_add_defect"; make variable match
+  const c_add_defect = document.getElementById('c_add_defect');
   const c_def_list = document.getElementById('c_defects_list');
   const c_save = document.getElementById('c_save');
   const c_clear = document.getElementById('c_clear');
@@ -227,6 +220,12 @@ if ("serviceWorker" in navigator) {
   const exportBackup = document.getElementById('exportBackup');
   const clearAll = document.getElementById('clearAll');
 
+  // Basic safety: if some essential element is missing, log and stop to avoid hard errors
+  if(!dateEl || !lineEl || !workTypeEl || !recordsEl){
+    console.error('Elementos esenciales faltan en el DOM. Inicialización cancelada.');
+    return;
+  }
+
   // State
   let db = loadDB();
   let c_defects = [];
@@ -240,106 +239,118 @@ if ("serviceWorker" in navigator) {
   // UI toggles
   workTypeEl.addEventListener('change', ()=>{
     const v = workTypeEl.value;
-    centrosPanel.style.display = v === 'CENTROS' ? '' : 'none';
-    lineaPanel.style.display = v === 'LINEA_AEREA' ? '' : 'none';
+    if(centrosPanel) centrosPanel.style.display = v === 'CENTROS' ? '' : 'none';
+    if(lineaPanel) lineaPanel.style.display = v === 'LINEA_AEREA' ? '' : 'none';
   });
 
   // Centros defects
-  c_add_def.addEventListener('click', ()=>{
-    const t = c_def_text.value.trim(); if(!t) return;
-    c_defects.push(t); c_def_text.value=''; renderCDefects();
-  });
+  if(c_add_defect && c_def_text && c_def_list){
+    c_add_defect.addEventListener('click', ()=>{
+      const t = c_def_text.value.trim(); if(!t) return;
+      c_defects.push(t); c_def_text.value=''; renderCDefects();
+    });
+  }
   function renderCDefects(){
+    if(!c_def_list) return;
     c_def_list.innerHTML='';
     c_defects.forEach((d,i)=>{
       const div = document.createElement('div'); div.className='list-item';
       div.innerHTML = `<div>${escapeHtml(d)}</div><div class="actions"><button data-i="${i}" class="btn ghost compact">Eliminar</button></div>`;
       c_def_list.appendChild(div);
     });
-    c_def_list.querySelectorAll('button[data-i]').forEach(b=>b.addEventListener('click',e=>{c_defects.splice(+e.target.dataset.i,1);renderCDefects();}))
+    c_def_list.querySelectorAll('button[data-i]').forEach(b=>b.addEventListener('click',e=>{ const idx = Number(e.currentTarget.dataset.i); c_defects.splice(idx,1);renderCDefects(); }))
   }
 
   // Linea defects
-  l_add_def.addEventListener('click', ()=>{
-    const u = l_def_ubic.value.trim(); const d = l_def_desc.value.trim(); if(!u && !d) return;
-    l_defects.push({ubicacion:u,descripcion:d}); l_def_ubic.value=''; l_def_desc.value=''; renderLDefects();
-  });
+  if(l_add_def && l_def_ubic && l_def_desc && l_def_list){
+    l_add_def.addEventListener('click', ()=>{
+      const u = l_def_ubic.value.trim(); const d = l_def_desc.value.trim(); if(!u && !d) return;
+      l_defects.push({ubicacion:u,descripcion:d}); l_def_ubic.value=''; l_def_desc.value=''; renderLDefects();
+    });
+  }
   function renderLDefects(){
+    if(!l_def_list) return;
     l_def_list.innerHTML='';
     l_defects.forEach((d,i)=>{
       const div = document.createElement('div'); div.className='list-item';
       div.innerHTML = `<div><strong>${escapeHtml(d.ubicacion)}</strong> — ${escapeHtml(d.descripcion)}</div><div class="actions"><button data-i="${i}" class="btn ghost compact">Eliminar</button></div>`;
       l_def_list.appendChild(div);
     });
-    l_def_list.querySelectorAll('button[data-i]').forEach(b=>b.addEventListener('click',e=>{l_defects.splice(+e.target.dataset.i,1);renderLDefects();}))
+    l_def_list.querySelectorAll('button[data-i]').forEach(b=>b.addEventListener('click',e=>{ const idx = Number(e.currentTarget.dataset.i); l_defects.splice(idx,1);renderLDefects(); }))
   }
 
   // Save centro
-  c_save.addEventListener('click', ()=>{
-    if(!lineEl.value.trim()){alert('Escribe primero el NOMBRE DE LÍNEA');return}
-    const entry = {
-      id: editing?.id || uid(),
-      name: c_name.value.trim(),
-      type: c_type.value,
-      reposiciones: Number(c_repos.value)||0,
-      defects: c_defects.slice().map(d=>({descripcion:d})),
-      puntual: !!c_punctual.checked,
-      createdAt: new Date().toISOString()
-    };
-    saveEntry(dateEl.value, lineEl.value.trim(), 'centros', entry);
-    resetCentroForm(); renderAll();
-  });
-  c_clear.addEventListener('click', resetCentroForm);
+  if(c_save){
+    c_save.addEventListener('click', ()=>{
+      if(!lineEl.value.trim()){alert('Escribe primero el NOMBRE DE LÍNEA');return}
+      const entry = {
+        id: editing?.id || uid(),
+        name: c_name ? c_name.value.trim() : '',
+        type: c_type ? c_type.value : 'CT',
+        reposiciones: Number(c_repos ? c_repos.value : 0)||0,
+        defects: c_defects.slice().map(d=>({descripcion:d})),
+        puntual: !!(c_punctual && c_punctual.checked),
+        createdAt: new Date().toISOString()
+      };
+      saveEntry(dateEl.value, lineEl.value.trim(), 'centros', entry);
+      resetCentroForm(); renderAll();
+    });
+  }
+  if(c_clear) c_clear.addEventListener('click', resetCentroForm);
 
-  function resetCentroForm(){ c_name.value=''; c_type.value='CT'; c_repos.value=0; c_punctual.checked=false; c_defects=[]; renderCDefects(); editing=null; }
+  function resetCentroForm(){ if(c_name) c_name.value=''; if(c_type) c_type.value='CT'; if(c_repos) c_repos.value=0; if(c_punctual) c_punctual.checked=false; c_defects=[]; renderCDefects(); editing=null; }
 
   // Save linea
-  l_save.addEventListener('click', ()=>{
-    if(!lineEl.value.trim()){alert('Escribe primero el NOMBRE DE LÍNEA');return}
-    const entry = {
-      id: editing?.id || uid(),
-      reposiciones: Number(l_repos.value)||0,
-      medidas: Number(l_medidas.value)||0,
-      kms: Number(l_kms.value)||0,
-      defects: l_defects.slice().map(d=>({ubicacion:d.ubicacion,descripcion:d.descripcion})),
-      kmsPunctual: !!l_kms_punct.checked,
-      medidasPunctual: !!l_med_punct.checked,
-      createdAt: new Date().toISOString()
-    };
-    saveEntry(dateEl.value, lineEl.value.trim(), 'lineaAerea', entry);
-    resetLineaForm(); renderAll();
-  });
-  l_clear.addEventListener('click', resetLineaForm);
-  function resetLineaForm(){ l_repos.value=0; l_medidas.value=0; l_kms.value=0; l_kms_punct.checked=false; l_med_punct.checked=false; l_defects=[]; renderLDefects(); editing=null }
+  if(l_save){
+    l_save.addEventListener('click', ()=>{
+      if(!lineEl.value.trim()){alert('Escribe primero el NOMBRE DE LÍNEA');return}
+      const entry = {
+        id: editing?.id || uid(),
+        reposiciones: Number(l_repos ? l_repos.value : 0)||0,
+        medidas: Number(l_medidas ? l_medidas.value : 0)||0,
+        kms: Number(l_kms ? l_kms.value : 0)||0,
+        defects: l_defects.slice().map(d=>({ubicacion:d.ubicacion,descripcion:d.descripcion})),
+        kmsPunctual: !!(l_kms_punct && l_kms_punct.checked),
+        medidasPunctual: !!(l_med_punct && l_med_punct.checked),
+        createdAt: new Date().toISOString()
+      };
+      saveEntry(dateEl.value, lineEl.value.trim(), 'lineaAerea', entry);
+      resetLineaForm(); renderAll();
+    });
+  }
+  if(l_clear) l_clear.addEventListener('click', resetLineaForm);
+  function resetLineaForm(){ if(l_repos) l_repos.value=0; if(l_medidas) l_medidas.value=0; if(l_kms) l_kms.value=0; if(l_kms_punct) l_kms_punct.checked=false; if(l_med_punct) l_med_punct.checked=false; l_defects=[]; renderLDefects(); editing=null }
 
   // Save incidencia
-  i_save.addEventListener('click', ()=>{
-    if(!lineEl.value.trim()){alert('Escribe primero el NOMBRE DE LÍNEA');return}
-    const entry = { id: editing?.id || uid(), incidencia: i_title.value.trim(), descripcion: i_desc.value.trim(), ubicacion: i_ubic.value.trim(), createdAt: new Date().toISOString() };
-    saveEntry(dateEl.value, lineEl.value.trim(), 'incidencias', entry);
-    i_title.value=''; i_desc.value=''; i_ubic.value=''; editing=null; renderAll();
-  });
-  i_clear.addEventListener('click', ()=>{ i_title.value=''; i_desc.value=''; i_ubic.value=''; editing=null });
+  if(i_save){
+    i_save.addEventListener('click', ()=>{
+      if(!lineEl.value.trim()){alert('Escribe primero el NOMBRE DE LÍNEA');return}
+      const entry = { id: editing?.id || uid(), incidencia: i_title ? i_title.value.trim() : '', descripcion: i_desc ? i_desc.value.trim() : '', ubicacion: i_ubic ? i_ubic.value.trim() : '', createdAt: new Date().toISOString() };
+      saveEntry(dateEl.value, lineEl.value.trim(), 'incidencias', entry);
+      if(i_title) i_title.value=''; if(i_desc) i_desc.value=''; if(i_ubic) i_ubic.value=''; editing=null; renderAll();
+    });
+  }
+  if(i_clear) i_clear.addEventListener('click', ()=>{ if(i_title) i_title.value=''; if(i_desc) i_desc.value=''; if(i_ubic) i_ubic.value=''; editing=null });
 
   // Prepare line
-  prepareLine.addEventListener('click', ()=>{
+  if(prepareLine) prepareLine.addEventListener('click', ()=>{
     if(!lineEl.value.trim()){alert('Escribe primero el NOMBRE DE LÍNEA');return}
     ensureDateLine(dateEl.value, lineEl.value.trim()); renderAll(); alert('Línea preparada para registrar trabajos');
   });
 
   // Export TXT
-  exportTxtBtn.addEventListener('click', ()=>{
+  if(exportTxtBtn) exportTxtBtn.addEventListener('click', ()=>{
     exportTXT(dateEl.value);
   });
 
   // Export backup
-  exportBackup.addEventListener('click', ()=>{
+  if(exportBackup) exportBackup.addEventListener('click', ()=>{
     const raw = JSON.stringify(db,null,2);
     downloadBlob(raw, `prodrpr_backup_${new Date().toISOString().slice(0,10)}.json`, 'application/json');
   });
 
   // Clear all
-  clearAll.addEventListener('click', ()=>{ if(confirm('¿Eliminar todos los datos guardados?')){db={}; saveDB(); renderAll(); alert('Datos eliminados')} });
+  if(clearAll) clearAll.addEventListener('click', ()=>{ if(confirm('¿Eliminar todos los datos guardados?')){db={}; saveDB(); renderAll(); alert('Datos eliminados')} });
 
   // Helpers: load/save
   function loadDB(){ try{ return JSON.parse(localStorage.getItem(KEY)||'{}') }catch(e){return {}} }
@@ -351,9 +362,9 @@ if ("serviceWorker" in navigator) {
 
   function deleteEntry(d,line,section,id){ if(!confirm('Eliminar registro?')) return; if(db[d] && db[d][line]){ db[d][line][section]=db[d][line][section].filter(it=>it.id!==id); saveDB(); renderAll(); } }
 
-  function editEntry(d,line,section,id){ const entry = db[d][line][section].find(it=>it.id===id); if(!entry) return; editing={section,id}; dateEl.value=d; lineEl.value=line; if(section==='centros'){ c_name.value=entry.name||''; c_type.value=entry.type||'CT'; c_repos.value=entry.reposiciones||0; c_punctual.checked=!!entry.puntual; c_defects = (entry.defects||[]).map(x=>x.descripcion||''); renderCDefects(); workTypeEl.value='CENTROS'; workTypeEl.dispatchEvent(new Event('change')); }
-    if(section==='lineaAerea'){ l_repos.value=entry.reposiciones||0; l_medidas.value=entry.medidas||0; l_kms.value=entry.kms||0; l_kms_punct.checked=!!entry.kmsPunctual; l_med_punct.checked=!!entry.medidasPunctual; l_defects=(entry.defects||[]).map(x=>({ubicacion:x.ubicacion||'',descripcion:x.descripcion||''})); renderLDefects(); workTypeEl.value='LINEA_AEREA'; workTypeEl.dispatchEvent(new Event('change')); }
-    if(section==='incidencias'){ i_title.value=entry.incidencia||''; i_desc.value=entry.descripcion||''; i_ubic.value=entry.ubicacion||''; workTypeEl.value='CENTROS'; workTypeEl.dispatchEvent(new Event('change')); }
+  function editEntry(d,line,section,id){ const entry = db[d][line][section].find(it=>it.id===id); if(!entry) return; editing={section,id}; dateEl.value=d; lineEl.value=line; if(section==='centros'){ if(c_name) c_name.value=entry.name||''; if(c_type) c_type.value=entry.type||'CT'; if(c_repos) c_repos.value=entry.reposiciones||0; if(c_punctual) c_punctual.checked=!!entry.puntual; c_defects = (entry.defects||[]).map(x=>x.descripcion||''); renderCDefects(); workTypeEl.value='CENTROS'; workTypeEl.dispatchEvent(new Event('change')); }
+    if(section==='lineaAerea'){ if(l_repos) l_repos.value=entry.reposiciones||0; if(l_medidas) l_medidas.value=entry.medidas||0; if(l_kms) l_kms.value=entry.kms||0; if(l_kms_punct) l_kms_punct.checked=!!entry.kmsPunctual; if(l_med_punct) l_med_punct.checked=!!entry.medidasPunctual; l_defects=(entry.defects||[]).map(x=>({ubicacion:x.ubicacion||'',descripcion:x.descripcion||''})); renderLDefects(); workTypeEl.value='LINEA_AEREA'; workTypeEl.dispatchEvent(new Event('change')); }
+    if(section==='incidencias'){ if(i_title) i_title.value=entry.incidencia||''; if(i_desc) i_desc.value=entry.descripcion||''; if(i_ubic) i_ubic.value=entry.ubicacion||''; workTypeEl.value='CENTROS'; workTypeEl.dispatchEvent(new Event('change')); }
   }
 
   // Render all records for selected date
@@ -388,9 +399,9 @@ if ("serviceWorker" in navigator) {
     });
 
     // attach event handlers for edit/delete/export-line/delete-line
-    recordsEl.querySelectorAll('button[data-id]').forEach(b=>b.addEventListener('click', e=>{ const id=e.target.dataset.id; const section=e.target.dataset.section; const line=e.target.dataset.line; editEntry(dateEl.value,line,section,id); }))
-    recordsEl.querySelectorAll('button[data-del]').forEach(b=>b.addEventListener('click', e=>{ const id=e.target.dataset.del; const section=e.target.dataset.section; const line=e.target.dataset.line; deleteEntry(dateEl.value,line,section,id); }))
-    recordsEl.querySelectorAll('button[data-action]').forEach(b=>b.addEventListener('click', e=>{ const action=e.target.dataset.action; const line= e.target.dataset.line; if(action==='export-line'){ exportTXTforLine(dateEl.value, line); } if(action==='delete-line'){ if(confirm('Eliminar TODOS los registros de esta línea en esta fecha?')){ delete db[dateEl.value][line]; saveDB(); renderAll(); } } }))
+    recordsEl.querySelectorAll('button[data-id]').forEach(b=>b.addEventListener('click', e=>{ const id=e.currentTarget.dataset.id; const section=e.currentTarget.dataset.section; const line=e.currentTarget.dataset.line; editEntry(dateEl.value,line,section,id); }))
+    recordsEl.querySelectorAll('button[data-del]').forEach(b=>b.addEventListener('click', e=>{ const id=e.currentTarget.dataset.del; const section=e.currentTarget.dataset.section; const line=e.currentTarget.dataset.line; deleteEntry(dateEl.value,line,section,id); }))
+    recordsEl.querySelectorAll('button[data-action]').forEach(b=>b.addEventListener('click', e=>{ const action=e.currentTarget.dataset.action; const line= e.currentTarget.dataset.line; if(action==='export-line'){ exportTXTforLine(dateEl.value, line); } if(action==='delete-line'){ if(confirm('Eliminar TODOS los registros de esta línea en esta fecha?')){ delete db[dateEl.value][line]; saveDB(); renderAll(); } } }))
   }
 
   // Export TXT whole day
@@ -402,7 +413,7 @@ if ("serviceWorker" in navigator) {
   function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7) }
   function downloadBlob(content, filename, mime){ const blob = new Blob([content], {type: mime}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); }
   function deleteEntry(d,line,section,id){ if(!confirm('Eliminar registro?')) return; if(db[d] && db[d][line]){ db[d][line][section]=db[d][line][section].filter(it=>it.id!==id); saveDB(); renderAll(); } }
-  function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>"']/g,function(m){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]}) }
+  function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>\"']/g,function(m){return{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]}) }
   function sanitizeFilename(s){ return s.replace(/[^a-z0-9\.\-_]/gi,'_') }
 
   // Init: render existing
@@ -412,6 +423,7 @@ if ("serviceWorker" in navigator) {
   dateEl.addEventListener('change', renderAll);
 
 })();
+});
 </script>
 </body>
 </html>
